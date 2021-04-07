@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	uuid "github.com/satori/go.uuid"
 )
 
 type Route struct {
@@ -21,13 +21,13 @@ func RouteRetrieveAllEndpoint(response http.ResponseWriter, request *http.Reques
 
 func RouteRetrieveEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Add("content-type", "application/json")
-	params := mux.Vars(request)
+	/*params := mux.Vars(request)
 	for _, route := range routes {
 		if route.Id == params["id"] {
 			json.NewEncoder(response).Encode(route)
 			return
 		}
-	}
+	}*/
 	json.NewEncoder(response).Encode(Route{})
 }
 
@@ -36,26 +36,26 @@ func RouteCreateEndpoint(response http.ResponseWriter, request *http.Request) {
 	var route Route
 	json.NewDecoder(request.Body).Decode(&route)
 	route.Id = uuid.Must(uuid.NewV4()).String()
-	routes = append(routes, route)
+	//routes = append(routes, route)
 	json.NewEncoder(response).Encode(routes)
 }
 
 func RouteDeleteEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Add("content-type", "application/json")
-	params := mux.Vars(request)
+	/*params := mux.Vars(request)
 	for index, route := range routes {
 		if route.Id == params["id"] {
 			routes = append(routes[:index], routes[index+1:]...)
 			json.NewEncoder(response).Encode(routes)
 			return
 		}
-	}
+	}*/
 	json.NewEncoder(response).Encode(Route{})
 }
 
 func RouteUpdateEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Add("content-type", "application/json")
-	params := mux.Vars(request)
+	/*params := mux.Vars(request)
 	var changes Route
 	json.NewDecoder(request.Body).Decode(&changes)
 	for index, route := range routes {
@@ -70,6 +70,6 @@ func RouteUpdateEndpoint(response http.ResponseWriter, request *http.Request) {
 			json.NewEncoder(response).Encode(routes)
 			return
 		}
-	}
+	}*/
 	json.NewEncoder(response).Encode(Route{})
 }
