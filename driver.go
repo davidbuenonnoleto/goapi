@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -15,12 +17,30 @@ type Driver struct {
 	Firstname string `json:"firstname,omitempty" validate:"required"`
 	Lastname  string `json:"lastname,omitempty" validate:"required"`
 	Username  string `json:"username,omitempty" validate:"required"`
-	Password  string `json:"password,omitempty" validate:"required", gte=3"`
+	Password  string `json:"password,omitempty" validate:"required"`
+}
+
+var drivers []Driver = []Driver{
+	{
+		Id:        "driver-1",
+		Firstname: "Nic",
+		Lastname:  "Raboy",
+		Username:  "nraboy",
+		Password:  "pass",
+	},
+	{
+		Id:        "driver-2",
+		Firstname: "Maria",
+		Lastname:  "Raboy",
+		Username:  "mraboy",
+		Password:  "abc123",
+	},
 }
 
 func RegisterEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Add("content-type", "application/json")
 	var driver Driver
+
 	json.NewDecoder(request.Body).Decode(&driver)
 	validate := validator.New()
 	err := validate.Struct(driver)
@@ -38,7 +58,7 @@ func RegisterEndpoint(response http.ResponseWriter, request *http.Request) {
 
 func LoginEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Add("content-type", "application/json")
-	var data driver
+	var data Driver
 	json.NewDecoder(request.Body).Decode(&data)
 	validate := validator.New()
 	err := validate.StructExcept(data, "Firstname", "Lastname")
@@ -55,19 +75,28 @@ func LoginEndpoint(response http.ResponseWriter, request *http.Request) {
 				response.Write([]byte(`{ "message": "invalid password" }`))
 				return
 			}
-			json.NewEncoder(response).Encode(driver)
+			claims := CustomJWTClaim{
+				Id: driver.Id,
+				StandardClaims: jwt.StandardClaims{
+					ExpiresAt: time.Now().Local().Add(time.Hour).Unix(),
+					Issuer:    "The Polyglot Developer",
+				},
+			}
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+			tokenString, _ := token.SignedString(JWT_SECRET)
+			response.Write([]byte(`{ "token": "` + tokenString + `" }`))
 			return
 		}
 	}
 	response.Write([]byte(`{ "message": "invalid username" }`))
 }
 
-func driverRetrieveAllEndpoint(response http.ResponseWriter, request *http.Request) {
+func DriverRetrieveAllEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Add("content-type", "application/json")
 	json.NewEncoder(response).Encode(drivers)
 }
 
-func driverRetrieveEndpoint(response http.ResponseWriter, request *http.Request) {
+func DriverRetrieveEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Add("content-type", "application/json")
 	params := mux.Vars(request)
 	for _, driver := range drivers {
@@ -76,10 +105,10 @@ func driverRetrieveEndpoint(response http.ResponseWriter, request *http.Request)
 			return
 		}
 	}
-	json.NewEncoder(response).Encode(driver{})
+	json.NewEncoder(response).Encode(Driver{})
 }
 
-func driverDeleteEndpoint(response http.ResponseWriter, request *http.Request) {
+func DriverDeleteEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Add("content-type", "application/json")
 	params := mux.Vars(request)
 	for index, driver := range drivers {
@@ -89,13 +118,13 @@ func driverDeleteEndpoint(response http.ResponseWriter, request *http.Request) {
 			return
 		}
 	}
-	json.NewEncoder(response).Encode(driver{})
+	json.NewEncoder(response).Encode(Driver{})
 }
 
-func driverUpdateEndpoint(response http.ResponseWriter, request *http.Request) {
+func DriverUpdateEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Add("content-type", "application/json")
 	params := mux.Vars(request)
-	var changes driver
+	var changes Driver
 	json.NewDecoder(request.Body).Decode(&changes)
 	validate := validator.New()
 	err := validate.StructExcept(changes, "Firstname", "Lastname", "Username", "Password")
@@ -130,5 +159,5 @@ func driverUpdateEndpoint(response http.ResponseWriter, request *http.Request) {
 			return
 		}
 	}
-	json.NewEncoder(response).Encode(driver{})
+	json.NewEncoder(response).Encode(Driver{})
 }

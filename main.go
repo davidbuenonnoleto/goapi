@@ -1,50 +1,87 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/dgrijalva/jwt-go"
+	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
+	"github.com/mitchellh/mapstructure"
 )
 
-var drivers = Driver{
-	Id:        "1",
-	Firstname: "David",
-	Lastname:  "Noleto",
-	Username:  "dbone",
-	Password:  "123",
+type CustomJWTClaim struct {
+	Id string `json:"id"`
+	jwt.StandardClaims
 }
 
-var routes = Route{
-	Id:        "1",
-	Driver:    "2",
-	Zipcode:   "94015",
-	Numberpkg: "15",
+var JWT_SECRET []byte = []byte("thepolyglotdeveloper")
+
+func ValidateJWT(t string) (interface{}, error) {
+	token, err := jwt.Parse(t, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method %v", token.Header["alg"])
+		}
+		return JWT_SECRET, nil
+	})
+	if err != nil {
+		return nil, errors.New(`{ "message": "` + err.Error() + `" }`)
+	}
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		var tokenData CustomJWTClaim
+		mapstructure.Decode(claims, &tokenData)
+		return tokenData, nil
+	} else {
+		return nil, errors.New(`{ "message": "invalid token" }`)
+	}
+}
+
+func ValidateMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		driverizationHeader := request.Header.Get("driverization")
+		if driverizationHeader != "" {
+			bearerToken := strings.Split(driverizationHeader, " ")
+			if len(bearerToken) == 2 {
+				decoded, err := ValidateJWT(bearerToken[1])
+				if err != nil {
+					response.Header().Add("content-type", "application/json")
+					response.WriteHeader(500)
+					response.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+					return
+				}
+				context.Set(request, "decoded", decoded)
+				next(response, request)
+			}
+		} else {
+			response.Header().Add("content-type", "application/json")
+			response.WriteHeader(500)
+			response.Write([]byte(`{ "message": "auth header is required" }`))
+			return
+		}
+	})
 }
 
 func RootEndpoint(response http.ResponseWriter, request *http.Request) {
-	//defining the response type as json, it could be html, xml ...
 	response.Header().Add("content-type", "application/json")
-	response.Write([]byte(`{ "message": "Hello API" }`))
-
+	response.Write([]byte(`{ "message": "Hello World" }`))
 }
 
 func main() {
 	fmt.Println("Starting the application...")
-	//initializing gorilla mux router and serving on port :12345
-	router := mux.NewRouter()
-	router.HandleFunc("/", RootEndpoint).Methods("GET")
-	router.HandleFunc("/register", RegisterEndpoint).Methods("POST")
-	router.HandleFunc("/login", LoginEndpoint).Methods("POST")
-	router.HandleFunc("/drivers", DriverRetriveAllEndpoint).Methods("GET")
-	router.HandleFunc("/driver/{id}", DriverRetriveEndpoint).Methods("GET")
-	router.HandleFunc("/driver/{id}", DriverDeleteEndpoint).Methods("DELETE")
-	router.HandleFunc("/driver/{id}", DriverupdateEndpoint).Methods("PUT")
-	router.HandleFunc("/routes", RouteRetrieveAllEndpoint).Methods("GET")
-	router.HandleFunc("/route/{id}", RouteRetrieveEndpoint).Methods("GET")
-	router.HandleFunc("/route/{id}", RouteDeleteEndpoint).Methods("DELETE")
-	router.HandleFunc("/route/{id}", RouteUpdateEndpoint).Methods("PUT")
-	router.HandleFunc("/route", RouteCreateEndpoint).Methods("POST")
-	http.ListenAndServe(":12345", router)
-
+	r := mux.NewRouter()
+	r.HandleFunc("/", RootEndpoint).Methods("GET")
+	r.HandleFunc("/register", RegisterEndpoint).Methods("POST")
+	r.HandleFunc("/login", LoginEndpoint).Methods("POST")
+	r.HandleFunc("/drivers", DriverRetrieveAllEndpoint).Methods("GET")
+	r.HandleFunc("/driver/{id}", DriverRetrieveEndpoint).Methods("GET")
+	r.HandleFunc("/driver/{id}", DriverDeleteEndpoint).Methods("DELETE")
+	r.HandleFunc("/driver/{id}", DriverUpdateEndpoint).Methods("PUT")
+	r.HandleFunc("/routes", RouteRetrieveAllEndpoint).Methods("GET")
+	r.HandleFunc("/route/{id}", RouteRetrieveEndpoint).Methods("GET")
+	r.HandleFunc("/route/{id}", ValidateMiddleware(RouteDeleteEndpoint)).Methods("DELETE")
+	r.HandleFunc("/route/{id}", ValidateMiddleware(RouteUpdateEndpoint)).Methods("PUT")
+	r.HandleFunc("/route", ValidateMiddleware(RouteCreateEndpoint)).Methods("POST")
+	http.ListenAndServe(":12345", r)
 }
