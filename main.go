@@ -17,7 +17,7 @@ type CustomJWTClaim struct {
 	jwt.StandardClaims
 }
 
-var JWT_SECRET []byte = []byte("thepolyglotdeveloper")
+var JWT_SECRET []byte = []byte("jsonwebtokensecretkey")
 
 func ValidateJWT(t string) (interface{}, error) {
 	token, err := jwt.Parse(t, func(token *jwt.Token) (interface{}, error) {
