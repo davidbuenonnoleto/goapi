@@ -8,8 +8,10 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/context"
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/mitchellh/mapstructure"
+	"gopkg.in/couchbase/gocb.v1"
 )
 
 type CustomJWTClaim struct {
@@ -40,7 +42,7 @@ func ValidateJWT(t string) (interface{}, error) {
 
 func ValidateMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		driverizationHeader := request.Header.Get("driverization")
+		driverizationHeader := request.Header.Get("authorization")
 		if driverizationHeader != "" {
 			bearerToken := strings.Split(driverizationHeader, " ")
 			if len(bearerToken) == 2 {
@@ -68,20 +70,51 @@ func RootEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Write([]byte(`{ "message": "Hello World" }`))
 }
 
+var bucket *gocb.Bucket
+
 func main() {
-	fmt.Println("Starting the application...")
+	fmt.Println("Starting the api...")
+	cluster, _ := gocb.Connect("couchbase://localhost")
+	cluster.Authenticate(gocb.PasswordAuthenticator{
+		Username: "demo",
+		Password: "123456",
+	})
+	bucket, _ = cluster.OpenBucket("restful", "")
 	r := mux.NewRouter()
 	r.HandleFunc("/", RootEndpoint).Methods("GET")
 	r.HandleFunc("/register", RegisterEndpoint).Methods("POST")
 	r.HandleFunc("/login", LoginEndpoint).Methods("POST")
-	r.HandleFunc("/drivers", DriverRetrieveAllEndpoint).Methods("GET")
-	r.HandleFunc("/driver/{id}", DriverRetrieveEndpoint).Methods("GET")
-	r.HandleFunc("/driver/{id}", DriverDeleteEndpoint).Methods("DELETE")
-	r.HandleFunc("/driver/{id}", DriverUpdateEndpoint).Methods("PUT")
+	r.HandleFunc("/users", UserRetrieveAllEndpoint).Methods("GET")
+	r.HandleFunc("/user/{id}", UserRetrieveEndpoint).Methods("GET")
+	r.HandleFunc("/user/{id}", UserDeleteEndpoint).Methods("DELETE")
+	r.HandleFunc("/user/{id}", UserUpdateEndpoint).Methods("PUT")
 	r.HandleFunc("/routes", RouteRetrieveAllEndpoint).Methods("GET")
 	r.HandleFunc("/route/{id}", RouteRetrieveEndpoint).Methods("GET")
 	r.HandleFunc("/route/{id}", ValidateMiddleware(RouteDeleteEndpoint)).Methods("DELETE")
 	r.HandleFunc("/route/{id}", ValidateMiddleware(RouteUpdateEndpoint)).Methods("PUT")
 	r.HandleFunc("/route", ValidateMiddleware(RouteCreateEndpoint)).Methods("POST")
-	http.ListenAndServe(":12345", r)
+	methods := handlers.AllowedMethods(
+		[]string{
+			"GET",
+			"POST",
+			"PUT",
+			"DELETE",
+		},
+	)
+	headers := handlers.AllowedHeaders(
+		[]string{
+			"Content-Type",
+			"Authorization",
+			"X-Requested-With",
+		},
+	)
+	origins := handlers.AllowedOrigins(
+		[]string{
+			"*",
+		},
+	)
+	http.ListenAndServe(
+		":8080",
+		handlers.CORS(headers, methods, origins)(r),
+	)
 }
